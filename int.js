@@ -135,7 +135,7 @@
 
 			updateBackground: function (data) {
 				var show_bg = Lampa.Storage.get("show_background", true);
-				var backdropUrl = data && data.backdrop_path && show_bg ? Lampa.Api.img(data.backdrop_path, "w1280") : "";
+				var backdropUrl = data && data.backdrop_path && show_bg ? Lampa.Api.img(data.backdrop_path, "original") : "";
 
 				if (backdropUrl === this.backgroundLast) return;
 
