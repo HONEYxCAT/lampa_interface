@@ -9,18 +9,27 @@
 
 	window.plugin_interface_ready_v3 = true;
 
+	var globalInfoCache = {};
+
 	addStyles();
 	initializeSettings();
 
 	setupVoteColorsObserver();
 	setupVoteColorsForDetailPage();
+	setupPreloadObserver();
 
 	var mainMaker = Lampa.Maker.map("Main");
 	if (!mainMaker || !mainMaker.Items || !mainMaker.Create) return;
 
 	wrapMethod(mainMaker.Items, "onInit", function (originalMethod, args) {
-		if (originalMethod) originalMethod.apply(this, args);
 		this.__newInterfaceEnabled = shouldEnableInterface(this && this.object);
+
+		if (this.__newInterfaceEnabled) {
+			if (this.object) this.object.wide = false;
+			this.wide = false;
+		}
+
+		if (originalMethod) originalMethod.apply(this, args);
 	});
 
 	wrapMethod(mainMaker.Create, "onCreate", function (originalMethod, args) {
@@ -34,6 +43,14 @@
 	wrapMethod(mainMaker.Create, "onCreateAndAppend", function (originalMethod, args) {
 		var data = args && args[0];
 		if (this.__newInterfaceEnabled && data) {
+			data.wide = false;
+
+			if (!data.params) data.params = {};
+			if (!data.params.items) data.params.items = {};
+			data.params.items.view = 20;
+			data.params.items_per_row = 20;
+			data.items_per_row = 20;
+
 			extendResultsWithStyle(data);
 		}
 		return originalMethod ? originalMethod.apply(this, args) : undefined;
@@ -45,6 +62,7 @@
 
 		var element = args && args[0];
 		var data = args && args[1];
+
 		if (element && data) {
 			handleLineAppend(this, element, data);
 		}
@@ -134,13 +152,16 @@
 			},
 
 			updateBackground: function (data) {
-				var show_bg = Lampa.Storage.get("show_background", true);
-				var backdropUrl = data && data.backdrop_path && show_bg ? Lampa.Api.img(data.backdrop_path, "original") : "";
-
-				if (backdropUrl === this.backgroundLast) return;
+				var BACKGROUND_DEBOUNCE_DELAY = 300;
+				var self = this;
 
 				clearTimeout(this.backgroundTimer);
-				var self = this;
+
+				var show_bg = Lampa.Storage.get("show_background", true);
+				var bg_resolution = Lampa.Storage.get("background_resolution", "original");
+				var backdropUrl = data && data.backdrop_path && show_bg ? Lampa.Api.img(data.backdrop_path, bg_resolution) : "";
+
+				if (backdropUrl === this.backgroundLast) return;
 
 				this.backgroundTimer = setTimeout(function () {
 					if (!backdropUrl) {
@@ -168,7 +189,7 @@
 
 					self.backgroundLast = backdropUrl;
 					img.src = backdropUrl;
-				}, 100);
+				}, BACKGROUND_DEBOUNCE_DELAY);
 			},
 
 			reset: function () {
@@ -203,6 +224,12 @@
 		if (!data) return;
 
 		if (Array.isArray(data.results)) {
+			data.results.forEach(function (card) {
+				if (card.wide !== false) {
+					card.wide = false;
+				}
+			});
+
 			Lampa.Utils.extendItemsParams(data.results, {
 				style: {
 					name: Lampa.Storage.get("wide_post") !== false ? "wide" : "small",
@@ -290,6 +317,13 @@
 		line.__newInterfaceLine = true;
 
 		var state = getOrCreateState(items);
+
+		line.items_per_row = 20;
+		line.view = 20;
+		if (line.params) {
+			line.params.items_per_row = 20;
+			if (line.params.items) line.params.items.view = 20;
+		}
 
 		var processCard = function (card) {
 			handleCard(state, card);
@@ -492,7 +526,7 @@
 					}
 					.logo-moved-head { transition: opacity 0.4s ease; }
 					.logo-moved-separator { transition: opacity 0.4s ease; }
-					.new-interface .card .card__age, .new-interface .card .card__title { display: none !important; }
+					${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__age, ${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__title { display: none !important; }
 				</style>`;
 	}
 
@@ -513,10 +547,6 @@
 					}
 					.items-line__title .full-person__photo {
 						margin-right: 0.5em !important;
-					}
-					.card .card__age,
-					.card .card__title {
-						display: none !important;
 					}
 					.new-interface-info {
 						position: relative;
@@ -553,6 +583,7 @@
 						line-height: 1.3;
 					}
 					.new-interface-info__details {
+						margin-top: 1em;
 						margin-bottom: 1.6em;
 						display: flex;
 						align-items: center;
@@ -638,16 +669,84 @@
 					}
 					.logo-moved-head { transition: opacity 0.4s ease; }
 					.logo-moved-separator { transition: opacity 0.4s ease; }
-					.new-interface .card .card__age, .new-interface .card .card__title { display: none !important; }
+					${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__age, ${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__title { display: none !important; }
 				</style>`;
 	}
 
+	function preloadData(data, silent) {
+		if (!data || !data.id) return;
+		var source = data.source || "tmdb";
+		if (source !== "tmdb" && source !== "cub") return;
+
+		var mediaType = data.media_type === "tv" || data.name ? "tv" : "movie";
+		var language = Lampa.Storage.get("language") || "ru";
+		var apiUrl = Lampa.TMDB.api(mediaType + "/" + data.id + "?api_key=" + Lampa.TMDB.key() + "&append_to_response=content_ratings,release_dates&language=" + language);
+
+		if (!globalInfoCache[apiUrl]) {
+			var network = new Lampa.Reguest();
+			network.silent(apiUrl, function (response) {
+				globalInfoCache[apiUrl] = response;
+			});
+		}
+	}
+
+	var preloadTimer = null;
+	function preloadAllVisibleCards() {
+		if (!Lampa.Storage.get("async_load", true)) return;
+
+		clearTimeout(preloadTimer);
+		preloadTimer = setTimeout(function () {
+			var layer = $(".layer--visible");
+			if (!layer.length) return;
+
+			var cards = layer.find(".card");
+			var count = 0;
+
+			cards.each(function () {
+				var data = findCardData(this);
+				if (data) {
+					preloadData(data, true);
+					count++;
+				}
+			});
+		}, 800);
+	}
+
+	function setupPreloadObserver() {
+		var observer = new MutationObserver(function (mutations) {
+			if (!Lampa.Storage.get("async_load", true)) return;
+
+			var hasNewCards = false;
+			for (var i = 0; i < mutations.length; i++) {
+				var added = mutations[i].addedNodes;
+				for (var j = 0; j < added.length; j++) {
+					var node = added[j];
+					if (node.nodeType === 1) {
+						if (node.classList.contains("card") || node.querySelector(".card")) {
+							hasNewCards = true;
+							break;
+						}
+					}
+				}
+				if (hasNewCards) break;
+			}
+
+			if (hasNewCards) {
+				preloadAllVisibleCards();
+			}
+		});
+
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true,
+		});
+	}
 	function InfoPanel() {
 		this.html = null;
 		this.timer = null;
 		this.fadeTimer = null;
 		this.network = new Lampa.Reguest();
-		this.loaded = {};
+		this.loaded = globalInfoCache;
 		this.currentUrl = null;
 	}
 
@@ -914,7 +1013,7 @@
 				var img_cache = new Image();
 				img_cache.src = cached_url;
 
-				if (img_cache.complete) {
+				if (img_cache.complete || Lampa.Storage.get("async_load", true)) {
 					startLogoAnimation(cached_url, true);
 				} else {
 					startLogoAnimation(cached_url, false);
@@ -1011,7 +1110,7 @@
 			if (rating > 0) {
 				var rate_style = "";
 
-				if (Lampa.Storage.get("colored_ratings")) {
+				if (Lampa.Storage.get("colored_ratings", true)) {
 					var vote_num = parseFloat(rating);
 					var color = "";
 
@@ -1053,11 +1152,11 @@
 			}
 		}
 
-		if (Lampa.Storage.get("seas") !== false && data.number_of_seasons) {
+		if (Lampa.Storage.get("seas", false) && data.number_of_seasons) {
 			detailsInfo.push('<span class="full-start__pg" style="font-size: 0.9em;">Сезонов ' + data.number_of_seasons + "</span>");
 		}
 
-		if (Lampa.Storage.get("eps") !== false && data.number_of_episodes) {
+		if (Lampa.Storage.get("eps", false) && data.number_of_episodes) {
 			detailsInfo.push('<span class="full-start__pg" style="font-size: 0.9em;">Эпизодов ' + data.number_of_episodes + "</span>");
 		}
 
@@ -1129,7 +1228,6 @@
 		clearTimeout(this.fadeTimer);
 		clearTimeout(this.timer);
 		this.network.clear();
-		this.loaded = {};
 		this.currentUrl = null;
 
 		if (this.html) {
@@ -1139,7 +1237,7 @@
 	};
 
 	function updateVoteColors() {
-		if (!Lampa.Storage.get("colored_ratings")) return;
+		if (!Lampa.Storage.get("colored_ratings", true)) return;
 
 		function applyColorByRating(element) {
 			var $el = $(element);
@@ -1206,6 +1304,18 @@
 		Lampa.Listener.follow("full", function (data) {
 			if (data.type === "complite") {
 				setTimeout(updateVoteColors, 100);
+			}
+		});
+
+		Lampa.Listener.follow("activity", function (e) {
+			if (e.type === "active" || e.type === "start") {
+				setTimeout(preloadAllVisibleCards, 1000);
+			}
+		});
+
+		Lampa.Listener.follow("target", function (e) {
+			if (e.target && $(e.target).hasClass("card")) {
+				preloadAllVisibleCards();
 			}
 		});
 	}
@@ -1324,6 +1434,30 @@
 
 		Lampa.SettingsApi.addParam({
 			component: "style_interface",
+			param: { name: "async_load", type: "trigger", default: true },
+			field: { name: "Включить асинхронную загрузку данных" },
+			onChange: function (value) {
+				if (value) preloadAllVisibleCards();
+			},
+		});
+
+		Lampa.SettingsApi.addParam({
+			component: "style_interface",
+			param: { name: "background_resolution", type: "select", default: "original", values: { w300: "w300", w780: "w780", w1280: "w1280", original: "original" } },
+			field: { name: "Разрешение фона", description: "Качество загружаемых фоновых изображений" },
+		});
+
+		Lampa.SettingsApi.addParam({
+			component: "style_interface",
+			param: { name: "hide_captions", type: "trigger", default: true },
+			field: { name: "Скрывать подписи в истории просмотра", description: "Лампа будет перезагружена" },
+			onChange: function () {
+				window.location.reload();
+			},
+		});
+
+		Lampa.SettingsApi.addParam({
+			component: "style_interface",
 			param: { name: "wide_post", type: "trigger", default: true },
 			field: { name: "Широкие постеры", description: "Лампа будет перезагружена" },
 			onChange: function () {
@@ -1368,7 +1502,7 @@
 		var initInterval = setInterval(function () {
 			if (typeof Lampa !== "undefined") {
 				clearInterval(initInterval);
-				if (!Lampa.Storage.get("int_plug", "false")) {
+				if (!Lampa.Storage.get("int_plug", false)) {
 					setDefaultSettings();
 				}
 			}
@@ -1379,6 +1513,7 @@
 			Lampa.Storage.set("wide_post", "true");
 			Lampa.Storage.set("logo_show", "true");
 			Lampa.Storage.set("show_background", "true");
+			Lampa.Storage.set("background_resolution", "original");
 			Lampa.Storage.set("status", "true");
 			Lampa.Storage.set("seas", "false");
 			Lampa.Storage.set("eps", "false");
@@ -1387,6 +1522,8 @@
 			Lampa.Storage.set("ganr", "true");
 			Lampa.Storage.set("rat", "true");
 			Lampa.Storage.set("colored_ratings", "true");
+			Lampa.Storage.set("async_load", "true");
+			Lampa.Storage.set("hide_captions", "true");
 		}
 	}
 })();
