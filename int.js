@@ -47,9 +47,9 @@
 
 			if (!data.params) data.params = {};
 			if (!data.params.items) data.params.items = {};
-			data.params.items.view = 20;
-			data.params.items_per_row = 20;
-			data.items_per_row = 20;
+			data.params.items.view = 12;
+			data.params.items_per_row = 12;
+			data.items_per_row = 12;
 
 			extendResultsWithStyle(data);
 		}
@@ -157,6 +157,12 @@
 
 				clearTimeout(this.backgroundTimer);
 
+				if (this._pendingImg) {
+					this._pendingImg.onload = null;
+					this._pendingImg.onerror = null;
+					this._pendingImg = null;
+				}
+
 				var show_bg = Lampa.Storage.get("show_background", true);
 				var bg_resolution = Lampa.Storage.get("background_resolution", "original");
 				var backdropUrl = data && data.backdrop_path && show_bg ? Lampa.Api.img(data.backdrop_path, bg_resolution) : "";
@@ -175,9 +181,13 @@
 					var prevLayer = bg1.classList.contains("active") ? bg1 : bg2;
 
 					var img = new Image();
+					self._pendingImg = img;
+
 					img.onload = function () {
+						if (self._pendingImg !== img) return;
 						if (backdropUrl !== self.backgroundLast) return;
 
+						self._pendingImg = null;
 						nextLayer.src = backdropUrl;
 						nextLayer.classList.add("active");
 
@@ -318,11 +328,11 @@
 
 		var state = getOrCreateState(items);
 
-		line.items_per_row = 20;
-		line.view = 20;
+		line.items_per_row = 12;
+		line.view = 12;
 		if (line.params) {
-			line.params.items_per_row = 20;
-			if (line.params.items) line.params.items.view = 20;
+			line.params.items_per_row = 12;
+			if (line.params.items) line.params.items.view = 12;
 		}
 
 		var processCard = function (card) {
@@ -441,6 +451,7 @@
 						line-height: 1.3;
 					}
 					.new-interface-info__details {
+						margin-top: 1.2em;
 						margin-bottom: 1.6em;
 						display: flex;
 						align-items: center;
@@ -485,7 +496,7 @@
 						left: 0;
 						opacity: 0;
 						object-fit: cover;
-						transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+						transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 					}
 					.new-interface .full-start__background.active {
 						opacity: 1;
@@ -526,7 +537,7 @@
 					}
 					.logo-moved-head { transition: opacity 0.4s ease; }
 					.logo-moved-separator { transition: opacity 0.4s ease; }
-					${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__age, ${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__title { display: none !important; }
+					${Lampa.Storage.get("hide_captions", true) ? ".card:not(.card--collection) .card__age, .card:not(.card--collection) .card__title { display: none !important; }" : ""}
 				</style>`;
 	}
 
@@ -583,7 +594,7 @@
 						line-height: 1.3;
 					}
 					.new-interface-info__details {
-						margin-top: 1em;
+						margin-top: 1.2em;
 						margin-bottom: 1.6em;
 						display: flex;
 						align-items: center;
@@ -628,7 +639,7 @@
 						left: 0;
 						opacity: 0;
 						object-fit: cover;
-						transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+						transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 					}
 					.new-interface .full-start__background.active {
 						opacity: 1;
@@ -669,7 +680,7 @@
 					}
 					.logo-moved-head { transition: opacity 0.4s ease; }
 					.logo-moved-separator { transition: opacity 0.4s ease; }
-					${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__age, ${Lampa.Storage.get("hide_captions", true) ? "" : ".new-interface "}.card .card__title { display: none !important; }
+					${Lampa.Storage.get("hide_captions", true) ? ".card:not(.card--collection) .card__age, .card:not(.card--collection) .card__title { display: none !important; }" : ""}
 				</style>`;
 	}
 
@@ -1092,6 +1103,10 @@
 	InfoPanel.prototype.draw = function (data) {
 		if (!data || !this.html) return;
 
+		if (data.overview) {
+			this.html.find(".new-interface-info__description").text(data.overview);
+		}
+
 		var year = ((data.release_date || data.first_air_date || "0000") + "").slice(0, 4);
 
 		var rating = parseFloat((data.vote_average || 0) + "").toFixed(1);
@@ -1347,9 +1362,11 @@
 				description: "Настройки элементов",
 			},
 			onRender: function (item) {
-				setTimeout(function () {
-					$('.settings-param > div:contains("Стильный интерфейс")').parent().insertAfter($('div[data-name="interface_size"]'));
-				}, 20);
+				item.css("opacity", "0");
+				requestAnimationFrame(function () {
+					item.insertAfter($('div[data-name="interface_size"]'));
+					item.css("opacity", "");
+				});
 
 				item.on("hover:enter", function () {
 					Lampa.Settings.create("style_interface");
@@ -1450,7 +1467,7 @@
 		Lampa.SettingsApi.addParam({
 			component: "style_interface",
 			param: { name: "hide_captions", type: "trigger", default: true },
-			field: { name: "Скрывать подписи в истории просмотра", description: "Лампа будет перезагружена" },
+			field: { name: "Скрывать названия и год", description: "Лампа будет перезагружена" },
 			onChange: function () {
 				window.location.reload();
 			},
