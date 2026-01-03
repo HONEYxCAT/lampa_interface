@@ -12,6 +12,7 @@
 	var globalInfoCache = {};
 
 	Lampa.Storage.set("interface_size", "small");
+	Lampa.Storage.set("background", false);
 
 	addStyles();
 	initializeSettings();
