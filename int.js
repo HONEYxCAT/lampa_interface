@@ -17,8 +17,8 @@
 	addStyles();
 	initializeSettings();
 
-	setupVoteColorsObserver();
-	setupVoteColorsForDetailPage();
+	siStyleSetupVoteColorsObserver();
+	siStyleSetupVoteColorsForDetailPage();
 	setupPreloadObserver();
 
 	var mainMaker = Lampa.Maker.map("Main");
@@ -1128,7 +1128,7 @@
 			if (rating > 0) {
 				var rate_style = "";
 
-				if (Lampa.Storage.get("colored_ratings", true)) {
+				if (Lampa.Storage.get("si_colored_ratings", true)) {
 					var vote_num = parseFloat(rating);
 					var color = "";
 
@@ -1254,7 +1254,7 @@
 		}
 	};
 
-	function getColorByRating(vote) {
+	function siStyleGetColorByRating(vote) {
 		if (isNaN(vote)) return "";
 		if (vote >= 0 && vote <= 3) return "red";
 		if (vote > 3 && vote < 6) return "orange";
@@ -1264,7 +1264,7 @@
 		return "";
 	}
 
-	function applyColorByRating(element) {
+	function siStyleApplyColorByRating(element) {
 		var $el = $(element);
 		var voteText = $el.text().trim();
 
@@ -1274,14 +1274,12 @@
 		if (!match) return;
 
 		var vote = parseFloat(match[0]);
-		var color = getColorByRating(vote);
+		var color = siStyleGetColorByRating(vote);
 
-		if (color && Lampa.Storage.get("colored_ratings", true)) {
+		if (color && Lampa.Storage.get("si_colored_ratings", true)) {
 			$el.css("color", color);
 
-			// Применяем обводку только к элементам страницы деталей, исключая карточки
-			if (Lampa.Storage.get("rating_border", false) && !$el.hasClass("card__vote")) {
-				// Для элементов типа .rate--kp, .rate--imdb, .rate--cub применяем обводку только к родителю
+			if (Lampa.Storage.get("si_rating_border", false) && !$el.hasClass("card__vote")) {
 				if ($el.parent().hasClass("full-start__rate")) {
 					$el.parent().css("border", "1px solid " + color);
 					$el.css("border", "");
@@ -1305,32 +1303,32 @@
 		}
 	}
 
-	function updateVoteColors() {
-		if (!Lampa.Storage.get("colored_ratings", true)) return;
+	function siStyleUpdateVoteColors() {
+		if (!Lampa.Storage.get("si_colored_ratings", true)) return;
 
 		$(".card__vote").each(function () {
-			applyColorByRating(this);
+			siStyleApplyColorByRating(this);
 		});
 
 		$(".full-start__rate, .full-start-new__rate").each(function () {
-			applyColorByRating(this);
+			siStyleApplyColorByRating(this);
 		});
 
 		$(".info__rate, .card__imdb-rate, .card__kinopoisk-rate").each(function () {
-			applyColorByRating(this);
+			siStyleApplyColorByRating(this);
 		});
 
 		$(".rate--kp, .rate--imdb, .rate--cub").each(function () {
-			applyColorByRating($(this).find("> div").eq(0));
+			siStyleApplyColorByRating($(this).find("> div").eq(0));
 		});
 	}
 
-	function setupVoteColorsObserver() {
-		updateVoteColors();
+	function siStyleSetupVoteColorsObserver() {
+		siStyleUpdateVoteColors();
 
 		var pendingUpdate = null;
 		var observer = new MutationObserver(function (mutations) {
-			if (!Lampa.Storage.get("colored_ratings", true)) return;
+			if (!Lampa.Storage.get("si_colored_ratings", true)) return;
 
 			for (var i = 0; i < mutations.length; i++) {
 				var added = mutations[i].addedNodes;
@@ -1339,16 +1337,16 @@
 					if (node.nodeType === 1) {
 						var $node = $(node);
 						$node.find(".card__vote, .full-start__rate, .full-start-new__rate, .info__rate, .card__imdb-rate, .card__kinopoisk-rate").each(function () {
-							applyColorByRating(this);
+							siStyleApplyColorByRating(this);
 						});
 						$node.find(".rate--kp, .rate--imdb, .rate--cub").each(function () {
-							applyColorByRating($(this).find("> div").eq(0));
+							siStyleApplyColorByRating($(this).find("> div").eq(0));
 						});
 						if ($node.hasClass("card__vote") || $node.hasClass("full-start__rate") || $node.hasClass("info__rate")) {
-							applyColorByRating(node);
+							siStyleApplyColorByRating(node);
 						}
 						if ($node.hasClass("rate--kp") || $node.hasClass("rate--imdb") || $node.hasClass("rate--cub")) {
-							applyColorByRating($node.find("> div").eq(0));
+							siStyleApplyColorByRating($node.find("> div").eq(0));
 						}
 					}
 				}
@@ -1361,12 +1359,12 @@
 		});
 	}
 
-	function setupVoteColorsForDetailPage() {
+	function siStyleSetupVoteColorsForDetailPage() {
 		if (!window.Lampa || !Lampa.Listener) return;
 
 		Lampa.Listener.follow("full", function (data) {
 			if (data.type === "complite") {
-				updateVoteColors();
+				siStyleUpdateVoteColors();
 			}
 		});
 
@@ -1486,11 +1484,11 @@
 
 		Lampa.SettingsApi.addParam({
 			component: "style_interface",
-			param: { name: "colored_ratings", type: "trigger", default: true },
+			param: { name: "si_colored_ratings", type: "trigger", default: true },
 			field: { name: "Цветные рейтинги" },
 			onChange: function (value) {
 				if (value) {
-					updateVoteColors();
+					siStyleUpdateVoteColors();
 				} else {
 					$(".card__vote, .full-start__rate, .full-start-new__rate, .info__rate, .card__imdb-rate, .card__kinopoisk-rate").css("color", "").css("border", "");
 					$(".full-start__rate").css("border", "");
@@ -1500,10 +1498,10 @@
 
 		Lampa.SettingsApi.addParam({
 			component: "style_interface",
-			param: { name: "rating_border", type: "trigger", default: false },
+			param: { name: "si_rating_border", type: "trigger", default: false },
 			field: { name: "Обводка рейтингов" },
 			onChange: function (value) {
-				updateVoteColors();
+				siStyleUpdateVoteColors();
 			},
 		});
 
@@ -1596,10 +1594,10 @@
 			Lampa.Storage.set("vremya", "true");
 			Lampa.Storage.set("ganr", "true");
 			Lampa.Storage.set("rat", "true");
-			Lampa.Storage.set("colored_ratings", "true");
+			Lampa.Storage.set("si_colored_ratings", "true");
 			Lampa.Storage.set("async_load", "true");
 			Lampa.Storage.set("hide_captions", "true");
-			Lampa.Storage.set("rating_border", "false");
+			Lampa.Storage.set("si_rating_border", "false");
 			Lampa.Storage.set("interface_size", "small");
 		}
 	}
