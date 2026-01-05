@@ -1027,7 +1027,7 @@
 				var img_cache = new Image();
 				img_cache.src = cached_url;
 
-				if (img_cache.complete || Lampa.Storage.get("async_load", true)) {
+				if (img_cache.complete) {
 					startLogoAnimation(cached_url, true);
 				} else {
 					startLogoAnimation(cached_url, false);
