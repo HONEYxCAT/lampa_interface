@@ -1639,30 +1639,37 @@
 	function initAntiDmca() {
 		if (window.anti_dmca_plugin) return;
 		window.anti_dmca_plugin = true;
+
 		window.lampa_settings.dcma = [];
+		Lampa.Utils.dcma = function () { return false; };
 
-		Lampa.Utils.dcma = function () { return undefined; };
-		var defaultSource = Lampa.Storage.get("source", "cub");
+		var originalApiFull = Lampa.Api.full;
 
-		Lampa.Listener.follow("request_secuses", function (event) {
-			if (event.data.blocked) {
-				window.lampa_settings.dcma = [];
-				var active = Lampa.Activity.active();
-				active.source = "tmdb";
-				Lampa.Storage.set("source", "tmdb", true);
-				Lampa.Activity.replace(active);
-				Lampa.Storage.set("source", defaultSource, true);
+		Lampa.Api.full = function (params, oncomplite, onerror) {
+			if (params.source === "cub") {
+				var wrappedComplete = function (data) {
+					if (data && data.movie && data.movie.blocked) {
+						var tmdbParams = {
+							id: params.id,
+							method: params.method,
+							source: "tmdb"
+						};
+						Lampa.Api.sources.tmdb.full(tmdbParams, function (tmdbData) {
+							if (tmdbData && tmdbData.movie) {
+								tmdbData.movie.source = "cub";
+							}
+							oncomplite(tmdbData);
+						}, onerror);
+					} else {
+						oncomplite(data);
+					}
+				};
+				originalApiFull(params, wrappedComplete, onerror);
+			} else {
+				originalApiFull(params, oncomplite, onerror);
 			}
-		});
+		};
 	}
 
-	if (window.appready) {
-		initAntiDmca();
-	} else {
-		Lampa.Listener.follow("app", function (event) {
-			if (event.type === "ready") {
-				initAntiDmca();
-			}
-		});
-	}
+	initAntiDmca();
 })();
