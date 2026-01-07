@@ -233,6 +233,30 @@
 		return state;
 	}
 
+	function initChildModeApiHook() {
+		if (!Lampa.TMDB || !Lampa.TMDB.api) return;
+
+		var originalApi = Lampa.TMDB.api;
+
+		Lampa.TMDB.api = function (url) {
+			if (Lampa.Storage.get("child_mode", false)) {
+				if (url.indexOf("discover/") !== -1 || url.indexOf("trending/") !== -1 || url.indexOf("movie/popular") !== -1 || url.indexOf("movie/top_rated") !== -1 || url.indexOf("movie/now_playing") !== -1 || url.indexOf("movie/upcoming") !== -1 || url.indexOf("tv/popular") !== -1 || url.indexOf("tv/top_rated") !== -1 || url.indexOf("tv/on_the_air") !== -1 || url.indexOf("tv/airing_today") !== -1) {
+					if (url.indexOf("certification") === -1) {
+						var separator = url.indexOf("?") !== -1 ? "&" : "?";
+						url = url + separator + "certification_country=RU&certification.lte=16&include_adult=false";
+					}
+				}
+				if (url.indexOf("include_adult") === -1 && url.indexOf("search/") !== -1) {
+					var separator = url.indexOf("?") !== -1 ? "&" : "?";
+					url = url + separator + "include_adult=false";
+				}
+			}
+			return originalApi(url);
+		};
+	}
+
+	initChildModeApiHook();
+
 	function extendResultsWithStyle(data) {
 		if (!data) return;
 
@@ -1507,6 +1531,15 @@
 
 		Lampa.SettingsApi.addParam({
 			component: "style_interface",
+			param: { name: "child_mode", type: "trigger", default: false },
+			field: { name: "Детский режим", description: "Лампа будет перезагружена" },
+			onChange: function () {
+				window.location.reload();
+			},
+		});
+
+		Lampa.SettingsApi.addParam({
+			component: "style_interface",
 			param: { name: "async_load", type: "trigger", default: true },
 			field: { name: "Включить асинхронную загрузку данных" },
 			onChange: function (value) {
@@ -1598,6 +1631,7 @@
 			Lampa.Storage.set("async_load", "true");
 			Lampa.Storage.set("hide_captions", "true");
 			Lampa.Storage.set("si_rating_border", "false");
+			Lampa.Storage.set("child_mode", "false");
 			Lampa.Storage.set("interface_size", "small");
 		}
 	}
