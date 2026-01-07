@@ -1636,40 +1636,4 @@
 		}
 	}
 
-	function initAntiDmca() {
-		if (window.anti_dmca_plugin) return;
-		window.anti_dmca_plugin = true;
-
-		window.lampa_settings.dcma = [];
-		Lampa.Utils.dcma = function () { return false; };
-
-		var originalApiFull = Lampa.Api.full;
-
-		Lampa.Api.full = function (params, oncomplite, onerror) {
-			if (params.source === "cub") {
-				var wrappedComplete = function (data) {
-					if (data && data.movie && data.movie.blocked) {
-						var tmdbParams = {
-							id: params.id,
-							method: params.method,
-							source: "tmdb"
-						};
-						Lampa.Api.sources.tmdb.full(tmdbParams, function (tmdbData) {
-							if (tmdbData && tmdbData.movie) {
-								tmdbData.movie.source = "cub";
-							}
-							oncomplite(tmdbData);
-						}, onerror);
-					} else {
-						oncomplite(data);
-					}
-				};
-				originalApiFull(params, wrappedComplete, onerror);
-			} else {
-				originalApiFull(params, oncomplite, onerror);
-			}
-		};
-	}
-
-	initAntiDmca();
 })();
